@@ -2,9 +2,15 @@ import mongoose from "mongoose";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
-if(!MONGODB_URI) {
+if (!MONGODB_URI) {
     console.error("Please set the env var MONGODB_URI");
     process.exit(1);
+}
+declare global {
+    var mongoose: {
+        conn: typeof import("mongoose") | null;
+        promise: Promise<typeof import("mongoose")> | null;
+    };
 }
 
 let cached = global.mongoose;
@@ -12,14 +18,11 @@ let cached = global.mongoose;
 if (!cached) {
     cached = global.mongoose = { conn: null, promise: null };
 }
-
 async function dbConnect() {
     if (cached.conn) return cached.conn;
 
     if (!cached.promise) {
-        cached.promise = mongoose
-            .connect(MONGODB_URI!)
-            .then((mongoose) => mongoose);
+        cached.promise = mongoose.connect(MONGODB_URI!);
     }
     cached.conn = await cached.promise;
     return cached.conn;
