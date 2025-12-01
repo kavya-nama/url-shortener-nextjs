@@ -1,65 +1,172 @@
-import Image from "next/image";
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useEffect, useState } from "react";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { Copy, Trash } from "lucide-react";
+import { copiedToast, deletedToast, errorToast } from "@/lib/custom-toasts";
+import { toast } from "sonner";
+
+type Link = {
+    originalUrl: string;
+    shortCode: string;
+    clicks: number;
+};
 
 export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+    const [longURL, setLongURL] = useState("");
+    const [updated, setUpdated] = useState(new Date());
+    const [links, setLinks] = useState<Link[]>([]);
+
+    async function getAllLinks() {
+        const res = await fetch("/api/getAllLinks");
+        const allLinks = (await res.json()) as Link[];
+        return allLinks;
+    }
+
+    useEffect(() => {
+        getAllLinks().then((data) => setLinks(data));
+    }, [updated]);
+
+    async function shorten() {
+        toast.promise(
+            () => {
+                return new Promise<{ message: string }>(
+                    async (resolve, reject) => {
+                        try {
+                            const res = await fetch("/api/shorten", {
+                                method: "POST",
+                                body: JSON.stringify({ url: longURL }),
+                            });
+                            if (res.status === 400) {
+                                reject({
+                                    message: "Please provide a valid URL!",
+                                });
+                            } else if (res.status === 500) {
+                                reject({ message: "Server error!" });
+                            }
+                            // const data = await res.json();
+                            setUpdated(new Date());
+                            resolve({ message: "Short Link created!" });
+                        } catch (error) {
+                            console.error(error);
+                            reject({ message: "Server error!" });
+                        }
+                    }
+                );
+            },
+            {
+                loading: "Loading...",
+                success: (data) => data.message,
+                error: (data) => data.message,
+            }
+        );
+    }
+
+    async function copyText(text: string) {
+        try {
+            await navigator.clipboard.writeText(text);
+            copiedToast("Copied to clipboard!");
+        } catch (error) {
+            console.error(error);
+            errorToast("Failed to copy!");
+        }
+    }
+
+    async function deleteLink(shortCode: string) {
+        try {
+            const res = await fetch("/api/deleteLink", {
+                method: "DELETE",
+                body: JSON.stringify({ shortCode }),
+            });
+            const { message } = await res.json();
+            if (message && message === "success") {
+                setUpdated(new Date());
+                deletedToast("Deleted successfully!");
+            } else {
+                errorToast("Failed to delete!");
+            }
+        } catch (error) {
+            console.error(error);
+            errorToast("Failed to delete!");
+        }
+    }
+
+    return (
+        <>
+            <div className="flex flex-row gap-4">
+                <Input
+                    className="w-sm"
+                    placeholder="Enter url to shorten..."
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            shorten();
+                            setLongURL("");
+                        }
+                    }}
+                    onChange={(e) => {
+                        setLongURL(e.target.value);
+                    }}
+                    value={longURL}
+                />
+                <Button onClick={shorten}>Shorten</Button>
+            </div>
+
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>#</TableHead>
+                        <TableHead>Original URL</TableHead>
+                        <TableHead>Short URL</TableHead>
+                        <TableHead>Clicks</TableHead>
+                        <TableHead>Actions</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {links.map((link, i) => {
+                        const shortenedUrl =
+                            (new URL(window.location.href + link.shortCode)).toString();
+                        return (
+                            <TableRow key={link.shortCode}>
+                                <TableCell>{i + 1}</TableCell>
+                                <TableCell>{link.originalUrl}</TableCell>
+                                <TableCell>{shortenedUrl}</TableCell>
+                                <TableCell>{link.clicks}</TableCell>
+                                <TableCell>
+                                    <ButtonGroup>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() =>
+                                                copyText(shortenedUrl)
+                                            }
+                                        >
+                                            <Copy />
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() =>
+                                                deleteLink(link.shortCode)
+                                            }
+                                        >
+                                            <Trash />
+                                        </Button>
+                                    </ButtonGroup>
+                                </TableCell>
+                            </TableRow>
+                        );
+                    })}
+                </TableBody>
+            </Table>
+        </>
+    );
 }
